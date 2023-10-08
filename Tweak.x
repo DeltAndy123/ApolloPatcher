@@ -84,6 +84,7 @@ static void howtoUse(UIViewController *vc) {
         NSString *newUrlString = [newPrefix stringByAppendingString:kClientID];
         NSMutableURLRequest *modifiedRequest = [request mutableCopy];
         [modifiedRequest setURL:[NSURL URLWithString:newUrlString]];
+        [modifiedRequest setValue:[NSString stringWithFormat:@"Client-ID %@", kClientID] forHTTPHeaderField:@"Authorization"];
         return %orig(modifiedRequest,bodyData,completionHandler);
     }
     return %orig();
@@ -99,6 +100,7 @@ static void howtoUse(UIViewController *vc) {
         NSString *newUrlString = [newPrefix stringByAppendingString:suffix];
         NSMutableURLRequest *modifiedRequest = [request mutableCopy];
         [modifiedRequest setURL:[NSURL URLWithString:newUrlString]];
+        [modifiedRequest setValue:[NSString stringWithFormat:@"Client-ID %@", kClientID] forHTTPHeaderField:@"Authorization"];
         return %orig(modifiedRequest,completionHandler);
     }
     return %orig();
@@ -117,8 +119,10 @@ static NSString *imageID;
     } else if ([url.absoluteString containsString:@"https://apollogur.download/api/image/"]) {
         NSString *modifiedURLString = [NSString stringWithFormat:@"https://api.imgur.com/3/image/%@.json?client_id=%@", imageID, kClientID];
         NSURL *modifiedURL = [NSURL URLWithString:modifiedURLString];
-        // Access the modified URL to get the actual data
-        NSURLSessionDataTask *dataTask = [self dataTaskWithURL:modifiedURL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        // Add Authorization header along with modified URL, then get the data
+        NSMutableURLRequest *modifiedRequest = [NSMutableURLRequest requestWithURL:modifiedURL];
+        [modifiedRequest setValue:[NSString stringWithFormat:@"Client-ID %@", kClientID] forHTTPHeaderField:@"Authorization"];
+        NSURLSessionDataTask *dataTask = [self dataTaskWithRequest:modifiedRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             if (error || ![self isJSONResponse:response]) {
                 // If an error occurs or the response is not a JSON response, dummy data is used
                 [self useDummyDataWithCompletionHandler:completionHandler];
@@ -133,7 +137,21 @@ static NSString *imageID;
     } else if ([url.absoluteString containsString:@"https://apollogur.download/api/album/"]) {
         NSString *modifiedURLString = [NSString stringWithFormat:@"https://api.imgur.com/3/album/%@.json?client_id=%@", imageID, kClientID];
         NSURL *modifiedURL = [NSURL URLWithString:modifiedURLString];
-        return %orig(modifiedURL, completionHandler);
+        // Add Authorization header along with modified URL
+        NSMutableURLRequest *modifiedRequest = [NSMutableURLRequest requestWithURL:modifiedURL];
+        [modifiedRequest setValue:[NSString stringWithFormat:@"Client-ID %@", kClientID] forHTTPHeaderField:@"Authorization"];
+        NSURLSessionDataTask *dataTask = [self dataTaskWithRequest:modifiedRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            if (error || ![self isJSONResponse:response]) {
+                // If an error occurs or the response is not a JSON response, dummy data is used
+                [self useDummyDataWithCompletionHandler:completionHandler];
+            } else {
+                // If normal data is returned, the callback is executed
+                completionHandler(data, response, error);
+            }
+        }];
+        // return %orig(modifiedURL, completionHandler);
+        [dataTask resume];
+        return dataTask;
     }
     return %orig;
 }
